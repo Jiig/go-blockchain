@@ -76,6 +76,48 @@ func replaceChain(newBlocks []Block) {
 }
 
 func handleConn(conn net.Conn) {
+	io.WriteString(conn, "Enter a new BPM:")
+
+	scanner := bufio.NewScanner(conn)
+
+	go func() {
+		for scanner.Scan() {
+			bpm, err := strconv.Atoi(scanner.Text())
+			if err != nil {
+				log.Printf("%v not a nubmer: %v", scanner.Text(), err)
+				continue
+			}
+			newBlock, err := generateBlock(Blockchain[len(Blockchain)-1], bpm)
+			if err != nil {
+				log.Printf("Error generating block: %v", err)
+				continue
+			}
+
+			if isBlockValid(newBlock, Blockchain[len(Blockchain)-1]) {
+				newBlockChain := append(Blockchain, newBlock)
+				replaceChain(newBlockChain)
+			}
+
+			bcServer <- Blockchain
+			io.WriteString(conn, "\nEnter a new BPM:")
+		}
+	}()
+
+	go func() {
+		for {
+			time.Sleep(30 * time.Second)
+			output, err := json.Marshal(Blockchain)
+			if err != nil {
+				log.Fatal(err)
+			}
+			io.WriteString(conn, string(output))
+		}
+	}()
+
+	for range bcServer {
+		spew.Dump(Blockchain)
+	}
+
 	defer conn.Close()
 }
 
@@ -93,7 +135,7 @@ func main() {
 	Blockchain = append(Blockchain, genesisBlock)
 
 	server, err := net.Listen("tcp", ":"+os.Getenv("ADDR"))
-	if err != null {
+	if err != nil {
 		log.Fatal(err)
 	}
 
